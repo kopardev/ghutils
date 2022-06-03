@@ -84,9 +84,64 @@ df_json=pd.read_json(jsonfile)
 
 df_json['DaysOpen'] = df_json.apply(lambda row: get_time_difference(row), axis=1)
 
+# rearrange columns
+rearranged_cols = ['number','state','DaysOpen','createdAt','closedAt','title','body']
+df_json = df_json[rearranged_cols]
+
+# Create a Pandas Excel writer using XlsxWriter as the engine.
+writer = pd.ExcelWriter(args.excelfile, engine='xlsxwriter')
+
+# Convert the dataframe to an XlsxWriter Excel object.
+df_json.to_excel(writer, sheet_name='Sheet1', index=False)
+
+# Get the xlsxwriter workbook and worksheet objects.
+workbook  = writer.book
+worksheet = writer.sheets['Sheet1']
+
+# Get the dimensions of the dataframe.
+(max_row, max_col) = df_json.shape
+state_column_index = df_json.columns.get_loc("state")
+days_column_index = df_json.columns.get_loc("DaysOpen")
+
+# ic(max_row)
+# ic(max_col)
+# ic(state_column_index)
+
+# Light red fill with dark red text.
+format1 = workbook.add_format({'bg_color':   '#FFC7CE',
+                               'font_color': '#9C0006'})
+
+# Light yellow fill with dark yellow text.
+format2 = workbook.add_format({'bg_color':   '#FFEB9C',
+                               'font_color': '#9C6500'})
+
+# Green fill with dark green text.
+format3 = workbook.add_format({'bg_color':   '#C6EFCE',
+                               'font_color': '#006100'})
+
+# Apply a conditional format to the required cell range.
+worksheet.conditional_format(1, state_column_index, max_row, state_column_index, 
+                            {'type':     'text',
+                            'criteria': 'containing',
+                            'value':    'OPEN',
+                            'format':   format1})
+
+worksheet.conditional_format(1, state_column_index, max_row, state_column_index, 
+                            {'type':     'text',
+                            'criteria': 'containing',
+                            'value':    'CLOSED',
+                            'format':   format3})
+
+worksheet.conditional_format(1, days_column_index, max_row, days_column_index,
+                            {'type':     '3_color_scale',
+                            'min_color': 'green', 
+                            'mid_color': 'white',
+                            'max_color': 'red'})
+
+# Close the Pandas Excel writer and output the Excel file.
 ic("Writing excel file ...")
-df_json.to_excel(args.excelfile,index = False)
+writer.save()
+
 ic("Cleaing up ...")
 os.remove(jsonfile)
 ic("Done!")
-
