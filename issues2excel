@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+
+__author__ = 'Vishal Koparde'
+__version__ = 'v0.1'
+__email__ = 'vishal.koparde@nih.gov'
+
+__desc__="""
+# This program using gh cli to download all issues for a particular GH repo
+# and its relevant metadata, and then convert it to excel format.
+"""
+
+import argparse
+import textwrap
+parser = argparse.ArgumentParser(description=textwrap.dedent(__desc__))
+
+# Adding Verison information
+parser.add_argument('--version', action = 'version', version='%(prog)s {}'.format(__version__))
+
+# other arguments
+parser.add_argument('-r',dest='repo',required=True,help='GH repo that you have access to')
+parser.add_argument('-o',dest='excelfile',required=True,help='Output Excel File')
+args = parser.parse_args()
+
+import time
+import os
+from src import fileutils
+import subprocess
+from icecream import ic
+import pandas as pd
+from datetime import datetime
+
+
+def unixTimestamp():
+    """create icecream prompt with unix timestamp
+    @return <str>:
+        program_name|timestamp|>
+    """
+    progname = os.path.basename(__file__)
+    return '{}|{}|> '.format(progname,int(time.time()))
+ic.configureOutput(prefix=unixTimestamp)
+
+def convert_date(date_str):
+    """converts date string to datetime object
+    @param date_str <str>:
+        date string
+    @return <datetime>:
+        datetime object
+    """
+    date_format = "%Y-%m-%dT%H:%M:%SZ"
+    return datetime.strptime(date_str, date_format)
+
+def get_time_difference(row):
+    """Return the number of days between 2 createdAt and closedAt dates
+    @param row <pandasrow>:
+        row from the pandas table where the output of gh cli issues list is loaded
+    @return <int>:
+        number of days between futuredate and pastdate
+    """
+    pastdate = convert_date(row['createdAt'])
+    futuredate = row['closedAt']
+    if futuredate == None:
+        futuredate = datetime.now()
+    else:
+        futuredate = convert_date(futuredate)
+    difference = futuredate - pastdate
+    return difference.days
+
+
+
+# GH CLI needs to be pre-installed... check it
+for tool in ["gh"]:
+    if not fileutils.exe_in_path(tool):
+        parser.error(" Executable \""+tool+"\" not found in PATH!") 
+
+jsonfile = args.excelfile+".json"
+cmd = "gh issue list --state 'all' --repo "+args.repo+" --json 'number,state,title,createdAt,closedAt,body' > "+jsonfile
+ic('Running GH CLI ...')
+ic(cmd)
+result = subprocess.run(cmd,shell=True,capture_output=True,text=True)
+result.check_returncode()
+
+ic("Reading json file ...")
+df_json=pd.read_json(jsonfile)
+
+df_json['DaysOpen'] = df_json.apply(lambda row: get_time_difference(row), axis=1)
+
+ic("Writing excel file ...")
+df_json.to_excel(args.excelfile,index = False)
+ic("Cleaing up ...")
+os.remove(jsonfile)
+ic("Done!")
+
